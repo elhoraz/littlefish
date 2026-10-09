@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         String    @default("PARENT") // ADMIN, TUTOR, PARENT
+  phone        String?
+  status       String    @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  parent       Parent?
+  tutor        Tutor?
+  auditLogs    AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Parent {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occupation       String?
+  address          String?
+  emergencyContact String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  students         Student[]
+}
+
+model Tutor {
+  id               String          @id @default(cuid())
+  userId           String          @unique
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization   String?
+  address          String?
+  compensationRate Float           @default(50000)
+  status           String          @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  classes          Class[]
+  attendances      Attendance[]
+  teachingModules  TeachingModule[]
+  assessments      Assessment[]
+  tutorPayments    TutorPayment[]
+}
+
+model Class {
+  id              String          @id @default(cuid())
+  name            String
+  level           String          // e.g. "TK / Calistung", "SD Kelas 1-3", "SD Kelas 4-6", "SMP"
+  room            String?
+  tutorId         String?
+  tutor           Tutor?          @relation(fields: [tutorId], references: [id], onDelete: SetNull)
+  dayOfWeek       String?         // e.g. "Senin & Rabu", "Selasa & Kamis", "Sabtu"
+  timeSlot        String?         // e.g. "14:00 - 15:30", "16:00 - 17:30"
+  capacity        Int             @default(10)
+  status          String          @default("ACTIVE") // ACTIVE, ARCHIVED
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  students        Student[]
+  attendances     Attendance[]
+  teachingModules TeachingModule[]
+  worksheets      Worksheet[]
+  assessments     Assessment[]
+
+  @@index([tutorId])
+  @@index([status])
+}
+
+model Student {
+  id                 String       @id @default(cuid())
+  studentId          String       @unique // e.g. LF-2026-001
+  fullName           String
+  nickname           String?
+  birthDate          DateTime?
+  gender             String       @default("Laki-laki") // Laki-laki, Perempuan
+  address            String?
+  phone              String?
+  parentId           String?
+  parent             Parent?      @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  classId            String?
+  class              Class?       @relation(fields: [classId], references: [id], onDelete: SetNull)
+  status             String       @default("ACTIVE") // ACTIVE, INACTIVE, GRADUATED
+  notes              String?
+  joinedAt           DateTime     @default(now())
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  attendances        Attendance[]
+  assessments        Assessment[]
+  sppPayments        SppPayment[]
+
+  @@index([parentId])
+  @@index([classId])
+  @@index([status])
+  @@index([fullName])
+}
+
+model Subject {
+  id              String          @id @default(cuid())
+  code            String          @unique // e.g. "CALISTUNG", "MAT-SD", "ENG-SD", "IPA-SD"
+  name            String
+  description     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  teachingModules TeachingModule[]
+  worksheets      Worksheet[]
+  assessments     Assessment[]
+}
+
+model Attendance {
+  id           String    @id @default(cuid())
+  date         DateTime
+  classId      String
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  studentId    String?
+  student      Student?  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tutorId      String?
+  tutor        Tutor?    @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  type         String    @default("STUDENT") // STUDENT, TUTOR
+  status       String    @default("HADIR")   // HADIR, IZIN, SAKIT, ALPA
+  notes        String?
+  recordedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([classId, date])
+  @@index([studentId])
+  @@index([tutorId])
+}
+
+model TeachingModule {
+  id           String    @id @default(cuid())
+  month        Int       // 1 - 12
+  year         Int       // e.g. 2026
+  classId      String
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  tutorId      String
+  tutor        Tutor     @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topic        String
+  objectives   String
+  materials    String
+  activities   String
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([classId, month, year])
+  @@index([tutorId])
+}
+
+model Worksheet {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  fileName     String
+  fileKey      String
+  fileUrl      String
+  fileType     String    // application/pdf, image/jpeg, etc.
+  fileSize     Int
+  classId      String
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  uploadedById String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([classId])
+  @@index([subjectId])
+}
+
+model Assessment {
+  id           String    @id @default(cuid())
+  date         DateTime  @default(now())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tutorId      String
+  tutor        Tutor     @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  classId      String
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    String
+  subject      Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topic        String
+  score        Float
+  masteryLevel String    // BELUM_MENGUASAI, MULAI_BERKEMBANG, CUKUP_MENGUASAI, MENGUASAI, SANGAT_MENGUASAI
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([studentId])
+  @@index([classId])
+  @@index([subjectId])
+  @@index([date])
+}
+
+model SppPayment {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  invoiceNumber String    @unique // e.g. INV-202610-001
+  month         Int       // 1 - 12
+  year          Int       // 2026
+  amount        Float     @default(250000)
+  paymentDate   DateTime?
+  status        String    @default("BELUM_BAYAR") // BELUM_BAYAR, MENUNGGU, LUNAS
+  method        String?   // TRANSFER, TUNAI, QRIS
+  notes         String?
+  recordedById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([studentId, month, year])
+  @@index([studentId])
+  @@index([status])
+  @@index([month, year])
+}
+
+model TutorPayment {
+  id           String    @id @default(cuid())
+  tutorId      String
+  tutor        Tutor     @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  month        Int       // 1 - 12
+  year         Int       // 2026
+  sessions     Int       @default(0)
+  rate         Float     @default(50000)
+  total        Float     @default(0)
+  status       String    @default("PENDING") // PENDING, PAID
+  paidAt       DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([tutorId, month, year])
+  @@index([tutorId])
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String
+  actorRole String
+  action    String   // CREATE, UPDATE, DELETE, LOGIN, LOGOUT
+  entity    String   // Student, Attendance, SPP, Assessment, etc.
+  entityId  String?
+  details   String?
+  timestamp DateTime @default(now())
+
+  user      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([entity])
+  @@index([timestamp])
+}
